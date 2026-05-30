@@ -1,0 +1,561 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<meta name="theme-color" content="#15120f" />
+<title>Super Tic-Tac-Toe</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<style>
+  :root{
+    --x:#f4503c;          /* X — vermillion   */
+    --o:#4d7cfe;          /* O — electric blue */
+    --c:#e0a93b;          /* C — tie / cat's game */
+    --bg:#15120f;
+    --bg2:#1d1916;
+    --surface:#221d19;
+    --surface2:#2b251f;
+    --line:#3a322b;
+    --ink:#f5efe6;
+    --muted:#9a8f82;
+    --accent:var(--x);
+    --radius:18px;
+    --shadow:0 18px 50px -18px rgba(0,0,0,.75);
+  }
+
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{height:100%;}
+  body{
+    margin:0;
+    font-family:"Manrope",system-ui,sans-serif;
+    color:var(--ink);
+    background:var(--bg);
+    background-image:
+      radial-gradient(120% 80% at 0% 0%, rgba(244,80,60,.16), transparent 45%),
+      radial-gradient(120% 80% at 100% 100%, rgba(77,124,254,.16), transparent 45%),
+      radial-gradient(90% 60% at 50% 0%, rgba(255,255,255,.04), transparent 60%);
+    min-height:100dvh;
+    overflow-x:hidden;
+    -webkit-font-smoothing:antialiased;
+    user-select:none;
+  }
+  /* grain overlay */
+  body::after{
+    content:"";position:fixed;inset:0;pointer-events:none;z-index:9999;opacity:.05;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+
+  .wrap{
+    min-height:100dvh;
+    display:flex;flex-direction:column;align-items:center;
+    padding:max(18px,env(safe-area-inset-top)) 16px max(18px,env(safe-area-inset-bottom));
+  }
+
+  button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit;touch-action:manipulation;}
+
+  .hidden{display:none !important;}
+
+  /* ============ HOME ============ */
+  #menu{
+    flex:1;width:100%;max-width:460px;display:flex;flex-direction:column;
+    justify-content:center;gap:14px;animation:rise .5s ease both;
+  }
+  .brand{text-align:center;margin-bottom:24px;}
+  .brand .eyebrow{
+    font-family:"Manrope";font-weight:700;letter-spacing:.34em;text-transform:uppercase;
+    font-size:11px;color:var(--muted);margin-bottom:14px;
+  }
+  .brand h1{
+    font-family:"Syne",sans-serif;font-weight:800;line-height:.92;margin:0;
+    font-size:clamp(44px,15vw,72px);letter-spacing:-.02em;
+  }
+  .brand h1 .l1{display:block;color:var(--ink);}
+  .brand h1 .l2{display:block;}
+  .brand h1 .l2 .a{color:var(--x);} .brand h1 .l2 .b{color:var(--o);}
+  .brand .sub{margin-top:14px;color:var(--muted);font-size:14px;font-weight:500;}
+
+  .menu-btn{
+    width:100%;padding:20px 22px;border-radius:var(--radius);
+    background:var(--surface);border:1px solid var(--line);
+    display:flex;align-items:center;justify-content:space-between;gap:14px;
+    font-size:18px;font-weight:700;letter-spacing:-.01em;
+    transition:transform .12s ease, background .2s ease, border-color .2s ease;
+    box-shadow:var(--shadow);
+  }
+  .menu-btn .ico{font-family:"Syne";font-weight:800;font-size:20px;width:40px;height:40px;
+    display:grid;place-items:center;border-radius:12px;background:var(--surface2);}
+  .menu-btn .meta{margin-left:auto;color:var(--muted);font-weight:600;font-size:13px;}
+  .menu-btn:active{transform:scale(.98);}
+  .menu-btn.primary{background:linear-gradient(135deg,var(--x),#c93a28);border-color:transparent;color:#fff;}
+  .menu-btn.primary .ico{background:rgba(255,255,255,.18);}
+  .menu-btn.primary .meta{color:rgba(255,255,255,.8);}
+  .menu-btn.disabledish{opacity:.55;}
+
+  .foot{margin-top:26px;text-align:center;color:var(--muted);font-size:12px;line-height:1.6;}
+  .foot a{color:var(--ink);text-decoration:none;border-bottom:1px dotted var(--muted);}
+
+  /* ============ PLAY ============ */
+  #play{flex:1;width:100%;max-width:480px;display:flex;flex-direction:column;gap:14px;}
+  .topbar{display:flex;align-items:center;gap:10px;}
+  .chip{
+    padding:11px 14px;border-radius:13px;background:var(--surface);border:1px solid var(--line);
+    font-weight:700;font-size:14px;display:flex;align-items:center;gap:8px;
+  }
+  .chip:active{transform:scale(.97);}
+  .chip.icon{font-family:"Syne";}
+  .spacer{flex:1;}
+
+  .turnbar{
+    display:flex;align-items:center;gap:13px;padding:14px 16px;border-radius:var(--radius);
+    background:var(--surface);border:1px solid var(--line);
+    box-shadow:inset 0 0 0 1.5px color-mix(in srgb, var(--accent) 32%, transparent);
+    transition:box-shadow .25s ease;
+  }
+  .turn-badge{
+    width:46px;height:46px;border-radius:13px;display:grid;place-items:center;
+    font-family:"Syne";font-weight:800;font-size:26px;color:#fff;
+    background:var(--accent);box-shadow:0 8px 20px -8px var(--accent);
+  }
+  .turn-text .who{font-family:"Syne";font-weight:800;font-size:17px;letter-spacing:-.01em;}
+  .turn-text .who b{color:var(--accent);}
+  .turn-text .hint{color:var(--muted);font-size:12.5px;font-weight:500;margin-top:2px;}
+
+  /* board */
+  .board-shell{width:100%;display:flex;justify-content:center;}
+  .board{
+    width:min(92vw,460px);aspect-ratio:1/1;
+    display:grid;grid-template-columns:repeat(3,1fr);gap:8px;
+    padding:8px;border-radius:20px;background:var(--bg2);border:1px solid var(--line);
+    box-shadow:var(--shadow);
+  }
+  .macro{
+    position:relative;border-radius:13px;background:var(--surface);
+    display:grid;grid-template-columns:repeat(3,1fr);gap:3px;padding:5px;
+    transition:box-shadow .2s ease, background .2s ease;
+  }
+  .macro.playable{
+    box-shadow:0 0 0 2.5px var(--accent), 0 0 22px -4px var(--accent);
+    background:color-mix(in srgb, var(--accent) 9%, var(--surface));
+  }
+  .macro.forced{
+    box-shadow:0 0 0 3px var(--accent), 0 0 28px -2px var(--accent);
+    animation:pulse 1.6s ease-in-out infinite;
+  }
+  .macro.decided{background:var(--bg2);}
+
+  .micro{
+    aspect-ratio:1/1;border-radius:7px;background:var(--surface2);
+    display:grid;place-items:center;
+    font-family:"Syne";font-weight:800;line-height:1;
+    font-size:clamp(13px,5.1vw,25px);
+    transition:transform .1s ease, background .15s ease;
+  }
+  .micro.x{color:var(--x);} .micro.o{color:var(--o);}
+  .micro.empty.live{background:var(--surface2);}
+  .micro.empty.live:active{transform:scale(.9);background:color-mix(in srgb,var(--accent) 22%, var(--surface2));}
+  .micro.empty:not(.live){background:#241f1a;}
+  .micro.last{box-shadow:inset 0 0 0 2px var(--accent);}
+  .micro .pop{animation:pop .18s ease;}
+
+  /* big overlay mark for a decided macro board */
+  .macro .big{
+    position:absolute;inset:0;display:grid;place-items:center;border-radius:13px;
+    font-family:"Syne";font-weight:800;line-height:1;
+    font-size:clamp(40px,15vw,86px);
+    backdrop-filter:blur(1px);
+  }
+  .macro .big.x{color:var(--x);background:color-mix(in srgb,var(--x) 13%, transparent);}
+  .macro .big.o{color:var(--o);background:color-mix(in srgb,var(--o) 13%, transparent);}
+  .macro .big.c{color:var(--c);background:color-mix(in srgb,var(--c) 13%, transparent);font-size:clamp(34px,12vw,72px);}
+  .macro .big .anim{animation:pop .25s ease;}
+
+  /* result banner */
+  .result{
+    display:flex;align-items:center;gap:14px;padding:16px;border-radius:var(--radius);
+    background:var(--surface);border:1px solid var(--line);animation:rise .4s ease both;
+  }
+  .result .rb{width:52px;height:52px;border-radius:14px;display:grid;place-items:center;
+    font-family:"Syne";font-weight:800;font-size:30px;color:#fff;}
+  .result.x .rb{background:var(--x);} .result.o .rb{background:var(--o);} .result.c .rb{background:var(--c);}
+  .result .rt .big{font-family:"Syne";font-weight:800;font-size:19px;}
+  .result .rt .small{color:var(--muted);font-size:13px;margin-top:2px;}
+  .result .actions{margin-left:auto;}
+  .btn-sm{padding:12px 16px;border-radius:12px;background:var(--accent);color:#fff;font-weight:700;font-size:14px;}
+  .btn-sm:active{transform:scale(.96);}
+
+  /* ============ MODAL / TOAST ============ */
+  .overlay{
+    position:fixed;inset:0;z-index:100;display:grid;place-items:center;padding:24px;
+    background:rgba(8,6,5,.62);backdrop-filter:blur(3px);animation:fade .2s ease;
+  }
+  .modal{
+    width:100%;max-width:360px;background:var(--surface);border:1px solid var(--line);
+    border-radius:22px;padding:26px 22px;box-shadow:var(--shadow);text-align:center;animation:rise .25s ease both;
+  }
+  .modal h3{font-family:"Syne";font-weight:800;font-size:22px;margin:0 0 8px;}
+  .modal p{color:var(--muted);font-size:14px;margin:0 0 20px;line-height:1.5;}
+  .modal .row{display:flex;gap:10px;}
+  .modal .row button{flex:1;padding:15px;border-radius:13px;font-weight:700;font-size:15px;}
+  .modal .yes{background:var(--x);color:#fff;}
+  .modal .no{background:var(--surface2);border:1px solid var(--line);}
+  .modal .row button:active{transform:scale(.97);}
+
+  .rules{text-align:left;}
+  .rules h3{text-align:center;}
+  .rules ol{margin:0 0 18px;padding-left:20px;color:var(--ink);font-size:13.5px;line-height:1.65;}
+  .rules ol li{margin-bottom:7px;}
+  .rules .close{width:100%;padding:14px;border-radius:13px;background:var(--surface2);border:1px solid var(--line);font-weight:700;}
+
+  .toast{
+    position:fixed;left:50%;bottom:max(30px,env(safe-area-inset-bottom));transform:translateX(-50%);
+    z-index:200;background:var(--ink);color:#15120f;font-weight:700;font-size:14px;
+    padding:13px 20px;border-radius:999px;box-shadow:var(--shadow);animation:toast 2.2s ease forwards;
+  }
+
+  @keyframes rise{from{opacity:0;transform:translateY(14px);}to{opacity:1;transform:none;}}
+  @keyframes fade{from{opacity:0;}to{opacity:1;}}
+  @keyframes pop{0%{transform:scale(.3);opacity:0;}60%{transform:scale(1.12);}100%{transform:scale(1);opacity:1;}}
+  @keyframes pulse{0%,100%{box-shadow:0 0 0 3px var(--accent),0 0 24px -4px var(--accent);}50%{box-shadow:0 0 0 3px var(--accent),0 0 34px 2px var(--accent);}}
+  @keyframes toast{0%{opacity:0;transform:translate(-50%,10px);}12%,80%{opacity:1;transform:translate(-50%,0);}100%{opacity:0;transform:translate(-50%,10px);}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- ================= HOME SCREEN ================= -->
+  <section id="menu">
+    <div class="brand">
+      <div class="eyebrow">Two players · one device</div>
+      <h1><span class="l1">Super</span><span class="l2"><span class="a">Tic</span>·<span class="b">Tac</span>·<span class="a">Toe</span></span></h1>
+      <div class="sub">Nine boards inside one. Win the small games to claim the big one.</div>
+    </div>
+
+    <button class="menu-btn primary" id="btn-new">
+      <span class="ico">+</span>
+      <span>Start New Game</span>
+    </button>
+
+    <button class="menu-btn" id="btn-continue">
+      <span class="ico">▸</span>
+      <span>Continue Game</span>
+      <span class="meta" id="continue-meta"></span>
+    </button>
+
+    <div class="foot">
+      Pass the phone back and forth — <b>X</b> and <b>O</b> take turns.<br>
+      <a id="btn-rules">How to play ›</a>
+    </div>
+  </section>
+
+  <!-- ================= PLAY SCREEN ================= -->
+  <section id="play" class="hidden">
+    <div class="topbar">
+      <button class="chip icon" id="btn-menu">‹ Menu</button>
+      <div class="spacer"></div>
+      <button class="chip" id="btn-help">?</button>
+      <button class="chip" id="btn-restart">Restart</button>
+    </div>
+
+    <div class="turnbar" id="turnbar">
+      <div class="turn-badge" id="turn-badge">X</div>
+      <div class="turn-text">
+        <div class="who" id="turn-who"></div>
+        <div class="hint" id="turn-hint"></div>
+      </div>
+    </div>
+
+    <div id="result-slot"></div>
+
+    <div class="board-shell">
+      <div class="board" id="board"></div>
+    </div>
+  </section>
+
+</div>
+
+<div id="overlay-slot"></div>
+<div id="toast-slot"></div>
+
+<script>
+"use strict";
+
+/* ---------- storage (degrades gracefully if unavailable) ---------- */
+const KEY = "superttt_save_v1";
+const store = {
+  read(){ try{ const r=localStorage.getItem(KEY); return r?JSON.parse(r):null; }catch(e){ return mem; } },
+  write(s){ try{ localStorage.setItem(KEY, JSON.stringify(s)); }catch(e){ mem=s; } },
+  clear(){ try{ localStorage.removeItem(KEY); }catch(e){ mem=null; } }
+};
+let mem = null; // fallback in-memory store
+
+/* ---------- winning lines ---------- */
+const LINES = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
+function lineWinner(a){
+  for(const [x,y,z] of LINES){
+    const v=a[x];
+    if(v && v!=="C" && v===a[y] && v===a[z]) return v;
+  }
+  return "";
+}
+
+/* ---------- game state ---------- */
+let state = null;
+
+function newState(){
+  return {
+    boards: Array.from({length:9},()=>({cells:Array(9).fill(""),winner:""})),
+    turn:"X",
+    active:null,        // forced macro board index, or null = play anywhere
+    winner:"",          // "", "X", "O", "C"
+    last:null,          // {b,c}
+    moves:0,
+    fresh:true          // helps animate only the newest mark
+  };
+}
+
+/* ---------- move logic ---------- */
+function applyMove(b,c){
+  if(state.winner) return false;
+  if(state.active!==null && b!==state.active) return false;
+  if(state.boards[b].winner!=="") return false;
+  if(state.boards[b].cells[c]!=="") return false;
+
+  const board = state.boards[b];
+  board.cells[c] = state.turn;
+  state.last = {b,c};
+  state.moves++;
+
+  // resolve this small board
+  const w = lineWinner(board.cells);
+  if(w) board.winner = w;
+  else if(board.cells.every(v=>v!=="")) board.winner = "C";
+
+  // resolve the big board
+  const macro = state.boards.map(x=>x.winner);
+  const bw = lineWinner(macro);
+  if(bw) state.winner = bw;
+  else if(state.boards.every(x=>x.winner!=="")) state.winner = "C";
+
+  // where must the opponent play next?
+  if(!state.winner){
+    const target = c;
+    state.active = (state.boards[target].winner!=="") ? null : target;
+    state.turn = state.turn==="X" ? "O" : "X";
+  }
+
+  store.write(state);
+  return true;
+}
+
+/* ---------- screens ---------- */
+const $ = id => document.getElementById(id);
+const menuEl = $("menu"), playEl = $("play");
+
+function showMenu(){
+  playEl.classList.add("hidden");
+  menuEl.classList.remove("hidden");
+  refreshMenu();
+}
+function showPlay(){
+  menuEl.classList.add("hidden");
+  playEl.classList.remove("hidden");
+  render();
+}
+
+function isOngoing(){
+  const s = store.read();
+  return !!(s && s.winner==="");
+}
+
+function refreshMenu(){
+  const ongoing = isOngoing();
+  const meta = $("continue-meta");
+  const cont = $("btn-continue");
+  if(ongoing){
+    const s = store.read();
+    meta.textContent = `${s.turn}'s turn · move ${s.moves}`;
+    cont.classList.remove("disabledish");
+  }else{
+    meta.textContent = "No game";
+    cont.classList.add("disabledish");
+  }
+}
+
+/* ---------- rendering the play screen ---------- */
+function render(){
+  const root = playEl;
+  root.dataset.turn = state.turn; // not strictly needed, accent set below
+  // set accent var based on whose turn (or winner)
+  const accentColor = state.winner
+    ? (state.winner==="C" ? "var(--c)" : (state.winner==="X"?"var(--x)":"var(--o)"))
+    : (state.turn==="X" ? "var(--x)" : "var(--o)");
+  document.documentElement.style.setProperty("--accent", accentColor);
+
+  // turn bar
+  $("turn-badge").textContent = state.winner ? (state.winner==="C"?"=":state.winner) : state.turn;
+  if(state.winner){
+    $("turn-who").innerHTML = state.winner==="C" ? "It's a draw" : `<b>${state.winner}</b> wins the game!`;
+    $("turn-hint").textContent = "Game over — start a new one below.";
+  }else{
+    $("turn-who").innerHTML = `<b>${state.turn}</b>'s turn`;
+    $("turn-hint").textContent = state.active===null
+      ? (state.moves===0 ? "Play anywhere to begin." : "Free move — play in any glowing board.")
+      : "Play in the glowing board.";
+  }
+
+  // result banner
+  const slot = $("result-slot");
+  if(state.winner){
+    const cls = state.winner==="C" ? "c" : (state.winner==="X"?"x":"o");
+    slot.innerHTML = `
+      <div class="result ${cls}">
+        <div class="rb">${state.winner==="C"?"C":state.winner}</div>
+        <div class="rt">
+          <div class="big">${state.winner==="C"?"Cat's game":(state.winner+" takes it")}</div>
+          <div class="small">${state.winner==="C"?"All boards filled, nobody lined up three.":"Three boards in a row."}</div>
+        </div>
+        <div class="actions"><button class="btn-sm" id="result-new">New game</button></div>
+      </div>`;
+    $("result-new").onclick = ()=>{ state=newState(); store.write(state); render(); };
+  }else{
+    slot.innerHTML = "";
+  }
+
+  // board
+  const board = $("board");
+  board.innerHTML = "";
+  for(let b=0;b<9;b++){
+    const bd = state.boards[b];
+    const macro = document.createElement("div");
+    macro.className = "macro";
+
+    const playableBoard = !state.winner && bd.winner==="" &&
+      (state.active===null || state.active===b);
+    if(playableBoard) macro.classList.add("playable");
+    if(!state.winner && state.active===b && bd.winner==="") macro.classList.add("forced");
+    if(bd.winner!=="") macro.classList.add("decided");
+
+    // micro cells
+    for(let c=0;c<9;c++){
+      const v = bd.cells[c];
+      const cell = document.createElement(playableBoard && v==="" ? "button":"div");
+      cell.className = "micro " + (v==="X"?"x":v==="O"?"o":"empty");
+      if(playableBoard && v==="") cell.classList.add("live");
+      if(state.last && state.last.b===b && state.last.c===c) cell.classList.add("last");
+      if(v){
+        const span = document.createElement("span");
+        span.textContent = v==="C" ? "" : v;
+        // animate only the freshly placed mark
+        if(state.fresh && state.last && state.last.b===b && state.last.c===c) span.className="pop";
+        cell.appendChild(span);
+      }
+      if(playableBoard && v===""){
+        cell.addEventListener("click", ()=>onTap(b,c));
+      }
+      macro.appendChild(cell);
+    }
+
+    // big overlay for decided board
+    if(bd.winner!==""){
+      const big = document.createElement("div");
+      const k = bd.winner==="X"?"x":bd.winner==="O"?"o":"c";
+      big.className = "big "+k;
+      const span = document.createElement("span");
+      span.textContent = bd.winner==="C" ? "C" : bd.winner;
+      if(state.fresh && state.last && state.last.b===b) span.className="anim";
+      big.appendChild(span);
+      macro.appendChild(big);
+    }
+
+    board.appendChild(macro);
+  }
+  state.fresh = false; // animations consumed
+}
+
+function onTap(b,c){
+  if(applyMove(b,c)){
+    state.fresh = true;
+    render();
+  }
+}
+
+/* ---------- overlays & toast ---------- */
+function closeOverlay(){ $("overlay-slot").innerHTML = ""; }
+function toast(msg){
+  $("toast-slot").innerHTML = `<div class="toast">${msg}</div>`;
+  setTimeout(()=>{ $("toast-slot").innerHTML=""; }, 2200);
+}
+function confirmCancel(onYes){
+  $("overlay-slot").innerHTML = `
+    <div class="overlay" id="ov">
+      <div class="modal">
+        <h3>Cancel current game?</h3>
+        <p>A game is already in progress. Starting a new one will erase it for good.</p>
+        <div class="row">
+          <button class="no" id="cc-no">No, keep it</button>
+          <button class="yes" id="cc-yes">Yes, start new</button>
+        </div>
+      </div>
+    </div>`;
+  $("cc-yes").onclick = ()=>{ closeOverlay(); onYes(); };
+  $("cc-no").onclick = closeOverlay;
+  $("ov").addEventListener("click", e=>{ if(e.target.id==="ov") closeOverlay(); });
+}
+function rulesModal(){
+  $("overlay-slot").innerHTML = `
+    <div class="overlay" id="ov">
+      <div class="modal rules">
+        <h3>How to play</h3>
+        <ol>
+          <li>The big board has nine cells; each holds its own small tic-tac-toe game.</li>
+          <li>Win a small game to claim that big cell with your mark.</li>
+          <li>Where you play inside a small game decides which big cell your opponent must play in next.</li>
+          <li>The very first move can go anywhere. After that, follow the glowing board.</li>
+          <li>If you're sent to a board that's already finished, you may play in any open board.</li>
+          <li>A drawn board — small or big — is marked <b>C</b> and counts for nobody.</li>
+          <li>Get three claimed big cells in a row to win the whole game.</li>
+        </ol>
+        <button class="close" id="rules-close">Got it</button>
+      </div>
+    </div>`;
+  $("rules-close").onclick = closeOverlay;
+  $("ov").addEventListener("click", e=>{ if(e.target.id==="ov") closeOverlay(); });
+}
+
+/* ---------- wire up home + play controls ---------- */
+function startFresh(){
+  state = newState();
+  store.write(state);
+  showPlay();
+}
+
+$("btn-new").addEventListener("click", ()=>{
+  if(isOngoing()) confirmCancel(startFresh);
+  else startFresh();
+});
+
+$("btn-continue").addEventListener("click", ()=>{
+  if(isOngoing()){
+    state = store.read();
+    state.fresh = false;
+    showPlay();
+  }else{
+    toast("No current game");
+    refreshMenu();
+  }
+});
+
+$("btn-rules").addEventListener("click", rulesModal);
+$("btn-help").addEventListener("click", rulesModal);
+$("btn-menu").addEventListener("click", showMenu);
+$("btn-restart").addEventListener("click", ()=>{
+  confirmCancel(()=>{ state=newState(); store.write(state); render(); });
+});
+
+/* ---------- boot ---------- */
+showMenu();
+</script>
+</body>
+</html>
