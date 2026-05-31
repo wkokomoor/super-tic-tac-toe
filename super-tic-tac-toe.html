@@ -234,7 +234,13 @@
 
     <button class="menu-btn primary" id="btn-new">
       <span class="ico">+</span>
-      <span>Start New Game</span>
+      <span>New Game vs Human</span>
+    </button>
+
+    <button class="menu-btn" id="btn-ai" style="background:linear-gradient(135deg,var(--o),#2d58d6);border-color:transparent;color:#fff;">
+      <span class="ico" style="background:rgba(255,255,255,.18);">AI</span>
+      <span>Play vs Computer</span>
+      <span class="meta" style="color:rgba(255,255,255,.8);">You play X</span>
     </button>
 
     <button class="menu-btn" id="btn-continue">
@@ -253,6 +259,7 @@
   <section id="play" class="hidden">
     <div class="topbar">
       <button class="chip icon" id="btn-menu">‹ Menu</button>
+      <div id="mode-chip" class="chip hidden" style="background:color-mix(in srgb,var(--o) 18%,var(--surface));border-color:var(--o);color:var(--o);font-size:12px;">vs CPU</div>
       <div class="spacer"></div>
       <button class="chip" id="btn-help">?</button>
       <button class="chip" id="btn-restart">Restart</button>
@@ -311,7 +318,8 @@ function newState(){
     winner:"",          // "", "X", "O", "C"
     last:null,          // {b,c}
     moves:0,
-    fresh:true          // helps animate only the newest mark
+    fresh:true,         // helps animate only the newest mark
+    vsAI:false
   };
 }
 
@@ -386,7 +394,8 @@ function refreshMenu(){
 /* ---------- rendering the play screen ---------- */
 function render(){
   const root = playEl;
-  root.dataset.turn = state.turn; // not strictly needed, accent set below
+  root.dataset.turn = state.turn;
+  $("mode-chip").classList.toggle("hidden", !state.vsAI);
   // set accent var based on whose turn (or winner)
   const accentColor = state.winner
     ? (state.winner==="C" ? "var(--c)" : (state.winner==="X"?"var(--x)":"var(--o)"))
@@ -396,10 +405,17 @@ function render(){
   // turn bar
   $("turn-badge").textContent = state.winner ? (state.winner==="C"?"=":state.winner) : state.turn;
   if(state.winner){
-    $("turn-who").innerHTML = state.winner==="C" ? "It's a draw" : `<b>${state.winner}</b> wins the game!`;
+    $("turn-who").innerHTML = state.winner==="C" ? "It's a draw" : (
+      state.vsAI
+        ? (state.winner==="X" ? "You win!" : `<b>Computer</b> wins!`)
+        : `<b>${state.winner}</b> wins the game!`
+    );
     $("turn-hint").textContent = "Game over — start a new one below.";
+  }else if(state.vsAI && state.turn==="O"){
+    $("turn-who").innerHTML = "<b>Computer</b>'s turn";
+    $("turn-hint").textContent = "Thinking…";
   }else{
-    $("turn-who").innerHTML = `<b>${state.turn}</b>'s turn`;
+    $("turn-who").innerHTML = state.vsAI ? "<b>Your</b> turn (X)" : `<b>${state.turn}</b>'s turn`;
     $("turn-hint").textContent = state.active===null
       ? (state.moves===0 ? "Play anywhere to begin." : "Free move — play in any glowing board.")
       : "Play in the glowing board.";
@@ -474,11 +490,105 @@ function render(){
   state.fresh = false; // animations consumed
 }
 
-function onTap(b,c){
+function onTap(b, c, fromAI){
+  if(!fromAI && state.vsAI && state.turn==="O") return;
   if(applyMove(b,c)){
     state.fresh = true;
     render();
+    if(state.vsAI && state.turn==="O" && !state.winner){
+      setTimeout(aiMove, 420);
+    }
   }
+}
+
+/* ---------- AI ---------- */
+const POS = [3,2,3,2,4,2,3,2,3]; // corners=3, edges=2, center=4
+
+function canWinNext(cells, mark){
+  for(const [a,b,c] of LINES){
+    const v = [cells[a],cells[b],cells[c]];
+    if(v.filter(x=>x===mark).length===2 && v.includes("")) return true;
+  }
+  return false;
+}
+
+function twoInRowCount(cells, mark){
+  let n=0;
+  for(const [a,b,c] of LINES){
+    const v=[cells[a],cells[b],cells[c]];
+    if(v.filter(x=>x===mark).length===2 && v.includes("")) n++;
+  }
+  return n;
+}
+
+function macroScore(macro, mark){
+  let s=0;
+  for(const [a,b,c] of LINES){
+    const v=[macro[a],macro[b],macro[c]];
+    const mine=v.filter(x=>x===mark).length;
+    const opp=v.filter(x=>x!==""&&x!==mark&&x!=="C").length;
+    if(opp===0) s += mine===3?10000 : mine===2?50 : mine===1?10 : 0;
+  }
+  return s;
+}
+
+function scoreMove(b, c){
+  const ai="O", hu="X";
+  const board = state.boards[b];
+  const cells = [...board.cells];
+  cells[c] = ai;
+  let score = 0;
+
+  const smallWin = lineWinner(cells)===ai;
+  if(smallWin){
+    const macro = state.boards.map((bd,i)=>i===b?ai:bd.winner);
+    if(lineWinner(macro)===ai) return 1e7; // wins the game
+    score += 600 + macroScore(macro,ai)*3 + POS[b]*40;
+  }
+
+  // block human winning small board
+  const bCells = [...board.cells]; bCells[c]=hu;
+  if(lineWinner(bCells)===hu){
+    const macro = state.boards.map((bd,i)=>i===b?hu:bd.winner);
+    if(lineWinner(macro)===hu) score += 9e6; // must block game win
+    else score += 350 + POS[b]*25;
+  }
+
+  // two-in-a-row potential on small board
+  score += twoInRowCount(cells,ai)*25;
+
+  // positional value
+  score += POS[c]*10 + POS[b]*5;
+
+  // evaluate where we send the opponent (board index = c)
+  const dest = state.boards[c];
+  if(dest.winner!==""){
+    score -= 25; // free choice for opponent is slightly bad
+  } else {
+    if(canWinNext(dest.cells,hu)) score -= 220; // don't gift them a win
+    score -= twoInRowCount(dest.cells,hu)*18;
+    if(canWinNext(dest.cells,ai)) score += 20; // we'd like to go there too
+  }
+
+  return score;
+}
+
+function aiMove(){
+  if(state.winner || state.turn!=="O") return;
+  const moves=[];
+  for(let b=0;b<9;b++){
+    if(state.boards[b].winner!=="") continue;
+    if(state.active!==null && state.active!==b) continue;
+    for(let c=0;c<9;c++){
+      if(state.boards[b].cells[c]==="") moves.push({b,c,s:scoreMove(b,c)});
+    }
+  }
+  if(!moves.length) return;
+  moves.sort((a,b)=>b.s-a.s);
+  const top=moves[0].s;
+  const best=moves.filter(m=>m.s===top);
+  const m=best[Math.floor(Math.random()*best.length)];
+  onTap(m.b, m.c, true);
 }
 
 /* ---------- overlays & toast ---------- */
@@ -531,9 +641,21 @@ function startFresh(){
   showPlay();
 }
 
+function startFreshVsAI(){
+  state = newState();
+  state.vsAI = true;
+  store.write(state);
+  showPlay();
+}
+
 $("btn-new").addEventListener("click", ()=>{
   if(isOngoing()) confirmCancel(startFresh);
   else startFresh();
+});
+
+$("btn-ai").addEventListener("click", ()=>{
+  if(isOngoing()) confirmCancel(startFreshVsAI);
+  else startFreshVsAI();
 });
 
 $("btn-continue").addEventListener("click", ()=>{
