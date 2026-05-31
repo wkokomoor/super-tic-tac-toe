@@ -26,6 +26,7 @@ Challenge the AI with three difficulty levels:
 - **Easy**: Random moves
 - **Medium**: Smart heuristic-based strategy
 - **Hard**: Nearly unbeatable minimax algorithm
+- **Impossible**: Secret mode — see below
 
 ### Continue Game
 Resume your last saved game (automatically saved to browser storage).
@@ -83,9 +84,9 @@ The AI uses a combination of approaches based on difficulty:
 - **Easy (Level 1)**: Pure random move selection
 - **Medium (Level 2)**: Heuristic scoring with weighted randomness among top candidates
 - **Hard (Level 3)**: Minimax with alpha-beta pruning (depth 3-5 depending on board state)
-- **Perfect (Level 4, Secret)**: Deep minimax search (depth 5-7) for nearly unbeatable play
+- **Impossible (Level 4, Secret)**: Deep minimax search (depth 5-7) for nearly unbeatable play
 
-The secret "Perfect" mode can be unlocked in the How to Play modal by pressing "1" twice.
+The secret "Impossible" mode can be unlocked by opening the How to Play modal and clicking the **"1."** number on the first rule.
 
 ## 📱 Browser Compatibility
 

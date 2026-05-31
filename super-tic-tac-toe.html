@@ -295,8 +295,6 @@ const store = {
   clear(){ try{ localStorage.removeItem(KEY); }catch(e){ mem=null; } }
 };
 let mem = null; // fallback in-memory store
-let secretKeyCount = 0; // tracker for secret 1-1 trigger
-let secretKeyTimer = null;
 
 /* ---------- winning lines ---------- */
 const LINES = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
@@ -363,7 +361,8 @@ function applyMove(b,c){
 const $ = id => document.getElementById(id);
 const menuEl = $("menu"), playEl = $("play");
 
-function showMenu(){  document.removeEventListener('keydown', secretKeyListener);  playEl.classList.add("hidden");
+function showMenu(){
+  playEl.classList.add("hidden");
   menuEl.classList.remove("hidden");
   refreshMenu();
 }
@@ -399,7 +398,7 @@ function render(){
   $("mode-chip").classList.toggle("hidden", !state.vsAI);
   if(state.vsAI){
     const lvl = state.aiLevel || 2;
-    const label = lvl===1?"Easy": lvl===2?"Medium": lvl===3?"Hard":"Perfect ✨";
+    const label = lvl===1?"Easy": lvl===2?"Medium": lvl===3?"Hard":"Impossible";
     $("mode-chip").textContent = `vs CPU · ${label}`;
   }
   // set accent var based on whose turn (or winner)
@@ -768,48 +767,29 @@ function rulesModal(){
     <div class="overlay" id="ov">
       <div class="modal rules">
         <h3>How to play</h3>
-        <ol>
-          <li>The big board has nine cells; each holds its own small tic-tac-toe game.</li>
-          <li>Win a small game to claim that big cell with your mark.</li>
-          <li>Where you play inside a small game decides which big cell your opponent must play in next.</li>
-          <li>The very first move can go anywhere. After that, follow the glowing board.</li>
-          <li>If you're sent to a board that's already finished, you may play in any open board.</li>
-          <li>A drawn board — small or big — is marked <b>C</b> and counts for nobody.</li>
-          <li>Get three claimed big cells in a row to win the whole game.</li>
+        <ol style="list-style:none;padding-left:1.4em;">
+          <li style="display:flex;gap:.4em;margin-bottom:7px;"><button id="secret-1" style="background:none;border:none;color:inherit;font:inherit;padding:0;min-width:1em;cursor:default;font-size:13.5px;line-height:1.65;">1.</button><span>The big board has nine cells; each holds its own small tic-tac-toe game.</span></li>
+          <li style="display:flex;gap:.4em;margin-bottom:7px;"><span style="min-width:1em;">2.</span><span>Win a small game to claim that big cell with your mark.</span></li>
+          <li style="display:flex;gap:.4em;margin-bottom:7px;"><span style="min-width:1em;">3.</span><span>Where you play inside a small game decides which big cell your opponent must play in next.</span></li>
+          <li style="display:flex;gap:.4em;margin-bottom:7px;"><span style="min-width:1em;">4.</span><span>The very first move can go anywhere. After that, follow the glowing board.</span></li>
+          <li style="display:flex;gap:.4em;margin-bottom:7px;"><span style="min-width:1em;">5.</span><span>If you're sent to a board that's already finished, you may play in any open board.</span></li>
+          <li style="display:flex;gap:.4em;margin-bottom:7px;"><span style="min-width:1em;">6.</span><span>A drawn board — small or big — is marked <b>C</b> and counts for nobody.</span></li>
+          <li style="display:flex;gap:.4em;margin-bottom:7px;"><span style="min-width:1em;">7.</span><span>Get three claimed big cells in a row to win the whole game.</span></li>
         </ol>
         <button class="close" id="rules-close">Got it</button>
       </div>
     </div>`;
+  $("secret-1").onclick = e => {
+    e.stopPropagation();
+    closeOverlay();
+    const launch = () => { state = newState(); state.vsAI = true; state.aiLevel = 4; store.write(state); showPlay(); };
+    if(isOngoing()) confirmCancel(launch);
+    else launch();
+  };
   $("rules-close").onclick = closeOverlay;
   $("ov").addEventListener("click", e=>{ if(e.target.id==="ov") closeOverlay(); });
-  // secret easter egg: press 1 twice to unlock perfect AI
-  secretKeyCount = 0;
-  document.addEventListener('keydown', secretKeyListener);
-  const oldClose = closeOverlay;
-  window.closeOverlay = function(){ document.removeEventListener('keydown', secretKeyListener); oldClose(); };
 }
 
-function secretKeyListener(e){
-  if(e.key==='1'){
-    secretKeyCount++;
-    clearTimeout(secretKeyTimer);
-    if(secretKeyCount===2){
-      secretKeyCount = 0;
-      document.removeEventListener('keydown', secretKeyListener);
-      closeOverlay();
-      toast('✨ Perfect mode unlocked!');
-      setTimeout(()=>{ 
-        state = newState(); 
-        state.vsAI = true; 
-        state.aiLevel = 4; 
-        store.write(state); 
-        showPlay(); 
-      }, 300);
-    }else{
-      secretKeyTimer = setTimeout(()=>{ secretKeyCount = 0; }, 2000);
-    }
-  }
-}
 
 function aiSelectModal(){
   $("overlay-slot").innerHTML = `
@@ -845,7 +825,6 @@ function startFreshVsAI(){
   if(saved && typeof saved.aiLevel === 'number') state.aiLevel = saved.aiLevel;
   store.write(state);
   showPlay();
-  document.removeEventListener('keydown', secretKeyListener);
 }
 
 $("btn-new").addEventListener("click", ()=>{
