@@ -319,6 +319,7 @@ function newState(){
     moves:0,
     fresh:true,         // helps animate only the newest mark
     vsAI:false
+    ,aiLevel:2         // 1=easy,2=medium,3=hard
   };
 }
 
@@ -395,6 +396,11 @@ function render(){
   const root = playEl;
   root.dataset.turn = state.turn;
   $("mode-chip").classList.toggle("hidden", !state.vsAI);
+  if(state.vsAI){
+    const lvl = state.aiLevel || 2;
+    const label = lvl===1?"Easy": lvl===2?"Medium":"Hard";
+    $("mode-chip").textContent = `vs CPU · ${label}`;
+  }
   // set accent var based on whose turn (or winner)
   const accentColor = state.winner
     ? (state.winner==="C" ? "var(--c)" : (state.winner==="X"?"var(--x)":"var(--o)"))
@@ -572,22 +578,152 @@ function scoreMove(b, c){
   return score;
 }
 
-function aiMove(){
-  if(state.winner || state.turn!=="O") return;
+// return list of legal moves for a given state-like object
+function getLegalMoves(s){
   const moves=[];
   for(let b=0;b<9;b++){
-    if(state.boards[b].winner!=="") continue;
-    if(state.active!==null && state.active!==b) continue;
-    for(let c=0;c<9;c++){
-      if(state.boards[b].cells[c]==="") moves.push({b,c,s:scoreMove(b,c)});
+    if(s.boards[b].winner!="") continue;
+    if(s.active!==null && s.active!==b) continue;
+    for(let c=0;c<9;c++) if(s.boards[b].cells[c]==="") moves.push({b,c});
+  }
+  return moves;
+}
+
+function cloneState(s){
+  return {
+    boards: s.boards.map(bd=>({cells:bd.cells.slice(), winner:bd.winner})),
+    turn: s.turn,
+    active: s.active,
+    winner: s.winner,
+    last: s.last?{...s.last}:null,
+    moves: s.moves,
+    fresh: s.fresh,
+    vsAI: s.vsAI,
+    aiLevel: s.aiLevel
+  };
+}
+
+function simulateMove(s, b, c, turn){
+  const ns = cloneState(s);
+  ns.boards[b].cells[c] = turn;
+  ns.last = {b,c};
+  ns.moves = (ns.moves||0) + 1;
+  // resolve small
+  const w = lineWinner(ns.boards[b].cells);
+  if(w) ns.boards[b].winner = w; else if(ns.boards[b].cells.every(v=>v!=="")) ns.boards[b].winner = "C";
+  // resolve macro
+  const macro = ns.boards.map(x=>x.winner);
+  const bw = lineWinner(macro);
+  if(bw) ns.winner = bw; else if(ns.boards.every(x=>x.winner!="")) ns.winner = "C";
+  if(!ns.winner){
+    const target = c;
+    ns.active = (ns.boards[target].winner!="") ? null : target;
+    ns.turn = turn==="X"?"O":"X";
+  }
+  return ns;
+}
+
+function evaluateState(s){
+  if(s.winner){
+    if(s.winner==="O") return 1e9;
+    if(s.winner==="X") return -1e9;
+    return 0;
+  }
+  const macro = s.boards.map(x=>x.winner);
+  let val = macroScore(macro, "O")*1000 - macroScore(macro, "X")*1000;
+  // add small-board potentials
+  for(let i=0;i<9;i++){
+    const bd = s.boards[i];
+    if(bd.winner===""){
+      val += twoInRowCount(bd.cells, "O")*30;
+      val -= twoInRowCount(bd.cells, "X")*28;
     }
   }
-  if(!moves.length) return;
+  return val;
+}
+
+function minimax(s, depth, alpha, beta, maximizing){
+  if(s.winner || depth<=0) return {score: evaluateState(s)};
+  const moves = getLegalMoves(s);
+  if(moves.length===0) return {score: evaluateState(s)};
+  // optionally reduce branching by heuristic when too wide
+  let branch = moves;
+  if(branch.length>28){
+    branch = branch.map(m=>({m,s:scoreMove(m.b,m.c)})).sort((a,b)=>b.s-a.s).slice(0,18).map(x=>x.m);
+  }
+
+  let bestMove = null;
+  if(maximizing){
+    let maxEval = -Infinity;
+    for(const mv of branch){
+      const child = simulateMove(s, mv.b, mv.c, s.turn);
+      const res = minimax(child, depth-1, alpha, beta, false);
+      if(res.score>maxEval){ maxEval = res.score; bestMove = mv; }
+      alpha = Math.max(alpha, res.score);
+      if(beta<=alpha) break;
+    }
+    return {score: maxEval, move: bestMove};
+  }else{
+    let minEval = Infinity;
+    for(const mv of branch){
+      const child = simulateMove(s, mv.b, mv.c, s.turn);
+      const res = minimax(child, depth-1, alpha, beta, true);
+      if(res.score<minEval){ minEval = res.score; bestMove = mv; }
+      beta = Math.min(beta, res.score);
+      if(beta<=alpha) break;
+    }
+    return {score: minEval, move: bestMove};
+  }
+}
+
+function chooseMoveEasy(){
+  const moves = getLegalMoves(state);
+  if(!moves.length) return null;
+  // purely random
+  return moves[Math.floor(Math.random()*moves.length)];
+}
+
+function chooseMoveMedium(){
+  // heuristic with some randomness among top candidates
+  const moves = getLegalMoves(state).map(m=>({b:m.b,c:m.c,s:scoreMove(m.b,m.c)}));
+  if(!moves.length) return null;
   moves.sort((a,b)=>b.s-a.s);
-  const top=moves[0].s;
-  const best=moves.filter(m=>m.s===top);
-  const m=best[Math.floor(Math.random()*best.length)];
-  onTap(m.b, m.c, true);
+  const take = Math.max(1, Math.min(6, Math.ceil(moves.length*0.18)));
+  const top = moves.slice(0,take);
+  // weighted pick by score
+  const total = top.reduce((p,c)=>p+(c.s - top[top.length-1].s + 1),0);
+  let r = Math.random()*total;
+  for(const t of top){
+    const w = (t.s - top[top.length-1].s + 1);
+    if(r < w) return {b:t.b,c:t.c};
+    r -= w;
+  }
+  const t = top[0]; return {b:t.b,c:t.c};
+}
+
+function chooseMoveHard(){
+  // use minimax (with depth adapted to branching)
+  const legal = getLegalMoves(state);
+  if(!legal.length) return null;
+  let depth = 5;
+  if(legal.length>36) depth = 3;
+  else if(legal.length>20) depth = 4;
+  const cloned = cloneState(state);
+  const res = minimax(cloned, depth, -Infinity, Infinity, cloned.turn==="O");
+  if(res && res.move) return res.move;
+  // fallback
+  return chooseMoveMedium();
+}
+
+function aiMove(){
+  if(state.winner || state.turn!=="O") return;
+  let mv = null;
+  const lvl = state.aiLevel || 2;
+  if(lvl===1) mv = chooseMoveEasy();
+  else if(lvl===2) mv = chooseMoveMedium();
+  else mv = chooseMoveHard();
+  if(!mv) return;
+  onTap(mv.b, mv.c, true);
 }
 
 /* ---------- overlays & toast ---------- */
@@ -633,6 +769,25 @@ function rulesModal(){
   $("ov").addEventListener("click", e=>{ if(e.target.id==="ov") closeOverlay(); });
 }
 
+function aiSelectModal(){
+  $("overlay-slot").innerHTML = `
+    <div class="overlay" id="ov">
+      <div class="modal">
+        <h3>Choose AI difficulty</h3>
+        <p style="color:var(--muted);">Pick how strong the computer should play. 1 = easiest, 3 = toughest.</p>
+        <div class="row" style="margin-top:12px;flex-direction:column;">
+          <button id="ai-1" style="background:var(--surface2);border:1px solid var(--line);">1 — Easy (random)</button>
+          <button id="ai-2" style="margin-top:8px;background:linear-gradient(135deg,var(--o),#2d58d6);color:#fff;">2 — Medium (good)</button>
+          <button id="ai-3" style="margin-top:8px;background:linear-gradient(135deg,var(--x),#c93a28);color:#fff;">3 — Hard (nearly perfect)</button>
+        </div>
+      </div>
+    </div>`;
+  $("ai-1").onclick = ()=>{ closeOverlay(); state = newState(); state.vsAI=true; state.aiLevel=1; store.write(state); showPlay(); };
+  $("ai-2").onclick = ()=>{ closeOverlay(); state = newState(); state.vsAI=true; state.aiLevel=2; store.write(state); showPlay(); };
+  $("ai-3").onclick = ()=>{ closeOverlay(); state = newState(); state.vsAI=true; state.aiLevel=3; store.write(state); showPlay(); };
+  $("ov").addEventListener("click", e=>{ if(e.target.id==="ov") closeOverlay(); });
+}
+
 /* ---------- wire up home + play controls ---------- */
 function startFresh(){
   state = newState();
@@ -643,6 +798,9 @@ function startFresh(){
 function startFreshVsAI(){
   state = newState();
   state.vsAI = true;
+  // preserve previously selected level if present in storage
+  const saved = store.read();
+  if(saved && typeof saved.aiLevel === 'number') state.aiLevel = saved.aiLevel;
   store.write(state);
   showPlay();
 }
@@ -653,8 +811,9 @@ $("btn-new").addEventListener("click", ()=>{
 });
 
 $("btn-ai").addEventListener("click", ()=>{
-  if(isOngoing()) confirmCancel(startFreshVsAI);
-  else startFreshVsAI();
+  const openPicker = ()=> aiSelectModal();
+  if(isOngoing()) confirmCancel(openPicker);
+  else openPicker();
 });
 
 $("btn-continue").addEventListener("click", ()=>{
