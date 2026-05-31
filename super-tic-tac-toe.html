@@ -10,8 +10,8 @@
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet" />
 <style>
   :root{
-    --x:#f4503c;          /* X — vermillion   */
-    --o:#4d7cfe;          /* O — electric blue */
+    --x:#5aa96b;          /* X — calm green   */
+    --o:#d4a574;          /* O — warm yellow */
     --c:#e0a93b;          /* C — tie / cat's game */
     --bg:#15120f;
     --bg2:#1d1916;
@@ -33,8 +33,8 @@
     color:var(--ink);
     background:var(--bg);
     background-image:
-      radial-gradient(120% 80% at 0% 0%, rgba(244,80,60,.16), transparent 45%),
-      radial-gradient(120% 80% at 100% 100%, rgba(77,124,254,.16), transparent 45%),
+      radial-gradient(120% 80% at 0% 0%, rgba(90,169,107,.16), transparent 45%),
+      radial-gradient(120% 80% at 100% 100%, rgba(212,165,116,.16), transparent 45%),
       radial-gradient(90% 60% at 50% 0%, rgba(255,255,255,.04), transparent 60%);
     min-height:100dvh;
     overflow-x:hidden;
@@ -88,7 +88,7 @@
     display:grid;place-items:center;border-radius:12px;background:var(--surface2);}
   .menu-btn .meta{margin-left:auto;color:var(--muted);font-weight:600;font-size:13px;}
   .menu-btn:active{transform:scale(.98);}
-  .menu-btn.primary{background:linear-gradient(135deg,var(--x),#c93a28);border-color:transparent;color:#fff;}
+  .menu-btn.primary{background:linear-gradient(135deg,var(--x),#3d7a52);border-color:transparent;color:#fff;}
   .menu-btn.primary .ico{background:rgba(255,255,255,.18);}
   .menu-btn.primary .meta{color:rgba(255,255,255,.8);}
   .menu-btn.disabledish{opacity:.55;}
@@ -236,7 +236,7 @@
       <span>New Game vs Human</span>
     </button>
 
-    <button class="menu-btn" id="btn-ai" style="background:linear-gradient(135deg,var(--o),#2d58d6);border-color:transparent;color:#fff;">
+    <button class="menu-btn" id="btn-ai" style="background:linear-gradient(135deg,var(--o),#a88a3a);border-color:transparent;color:#fff;">
       <span class="ico" style="background:rgba(255,255,255,.18);">AI</span>
       <span>Play vs Computer</span>
       <span class="meta" style="color:rgba(255,255,255,.8);">You play X</span>
@@ -260,6 +260,7 @@
       <button class="chip icon" id="btn-menu">‹ Menu</button>
       <div id="mode-chip" class="chip hidden" style="background:color-mix(in srgb,var(--o) 18%,var(--surface));border-color:var(--o);color:var(--o);font-size:12px;">vs CPU</div>
       <div class="spacer"></div>
+      <button class="chip" id="btn-undo">↶ Undo</button>
       <button class="chip" id="btn-help">?</button>
       <button class="chip" id="btn-restart">Restart</button>
     </div>
@@ -293,8 +294,8 @@ const store = {
   read(){ try{ const r=localStorage.getItem(KEY); return r?JSON.parse(r):null; }catch(e){ return mem; } },
   write(s){ try{ localStorage.setItem(KEY, JSON.stringify(s)); }catch(e){ mem=s; } },
   clear(){ try{ localStorage.removeItem(KEY); }catch(e){ mem=null; } }
-};
-let mem = null; // fallback in-memory store
+};let mem = null; // fallback in-memory store
+let moveHistory = []; // track previous game states for undo
 
 /* ---------- winning lines ---------- */
 const LINES = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
@@ -329,6 +330,9 @@ function applyMove(b,c){
   if(state.active!==null && b!==state.active) return false;
   if(state.boards[b].winner!=="") return false;
   if(state.boards[b].cells[c]!=="") return false;
+
+  // save current state to history before making the move
+  moveHistory.push(cloneState(state));
 
   const board = state.boards[b];
   board.cells[c] = state.turn;
@@ -406,6 +410,16 @@ function render(){
     ? (state.winner==="C" ? "var(--c)" : (state.winner==="X"?"var(--x)":"var(--o)"))
     : (state.turn==="X" ? "var(--x)" : "var(--o)");
   document.documentElement.style.setProperty("--accent", accentColor);
+  
+  // update undo button state
+  const undoBtn = $("btn-undo");
+  if(moveHistory.length === 0 || state.winner){
+    undoBtn.style.opacity = "0.5";
+    undoBtn.style.pointerEvents = "none";
+  }else{
+    undoBtn.style.opacity = "1";
+    undoBtn.style.pointerEvents = "auto";
+  }
 
   // turn bar
   $("turn-badge").textContent = state.winner ? (state.winner==="C"?"=":state.winner) : state.turn;
@@ -799,8 +813,8 @@ function aiSelectModal(){
         <p style="color:var(--muted);">Pick how strong the computer should play.</p>
         <div class="row" style="margin-top:12px;flex-direction:column;">
           <button id="ai-1" style="background:var(--surface2);border:1px solid var(--line);">1 — Easy (random)</button>
-          <button id="ai-2" style="margin-top:8px;background:linear-gradient(135deg,var(--o),#2d58d6);color:#fff;">2 — Medium (good)</button>
-          <button id="ai-3" style="margin-top:8px;background:linear-gradient(135deg,var(--x),#c93a28);color:#fff;">3 — Hard (nearly perfect)</button>
+          <button id="ai-2" style="margin-top:8px;background:linear-gradient(135deg,var(--o),#a88a3a);color:#fff;">2 — Medium (good)</button>
+          <button id="ai-3" style="margin-top:8px;background:linear-gradient(135deg,var(--x),#3d7a52);color:#fff;">3 — Hard (nearly perfect)</button>
         </div>
       </div>
     </div>`;
@@ -811,13 +825,28 @@ function aiSelectModal(){
 }
 
 /* ---------- wire up home + play controls ---------- */
+function undoMove(){
+  if(moveHistory.length === 0){
+    toast("No moves to undo");
+    return;
+  }
+  
+  // Pop the previous state from history
+  state = moveHistory.pop();
+  state.fresh = true; // animate the board update
+  store.write(state);
+  render();
+}
+
 function startFresh(){
+  moveHistory = [];
   state = newState();
   store.write(state);
   showPlay();
 }
 
 function startFreshVsAI(){
+  moveHistory = [];
   state = newState();
   state.vsAI = true;
   // preserve previously selected level if present in storage
@@ -841,6 +870,7 @@ $("btn-ai").addEventListener("click", ()=>{
 
 $("btn-continue").addEventListener("click", ()=>{
   if(isOngoing()){
+    moveHistory = [];
     state = store.read();
     state.fresh = false;
     showPlay();
@@ -853,8 +883,9 @@ $("btn-continue").addEventListener("click", ()=>{
 $("btn-rules").addEventListener("click", rulesModal);
 $("btn-help").addEventListener("click", rulesModal);
 $("btn-menu").addEventListener("click", showMenu);
+$("btn-undo").addEventListener("click", undoMove);
 $("btn-restart").addEventListener("click", ()=>{
-  confirmCancel(()=>{ state=newState(); store.write(state); render(); });
+  confirmCancel(()=>{ moveHistory = []; state=newState(); store.write(state); render(); });
 });
 
 /* ---------- boot ---------- */
